@@ -15,6 +15,7 @@ import { WorkerDataProvider } from '../contexts/WorkerDataContext';
 import { IInspectableComponent } from '../core/types';
 import type { WorkerManager } from '../services/WorkerManager';
 import { useUnmountSafe } from '../hooks/useUnmountSafe';
+import { getAutoloadConfig, runAutoload } from '../utils/autoload';
 
 type Props = {
     workerManager: WorkerManager;
@@ -150,6 +151,24 @@ const AppContentInner = ({
         const isDebuggerActive = rightTab === 'debugger';
         workerManager.setDebuggerActive(isDebuggerActive).catch(console.error);
     }, [rightTab, workerManager]);
+
+    // Optional auto-deploy via URL params (state/script loader)
+    const autoloadStartedRef = useRef(false);
+
+    useEffect(() => {
+        if (autoloadStartedRef.current) return;
+
+        const cfg = getAutoloadConfig(window.location.search);
+        if (!cfg) return;
+
+        autoloadStartedRef.current = true;
+
+        runAutoload(workerManager, cfg).catch((error) => {
+            console.error('[autoload] Failed to auto-load state/script:', error);
+        });
+    }, [workerManager]);
+
+
 
     const handleSaveState = useCallback(
         async (e: React.MouseEvent<HTMLAnchorElement>) => {
