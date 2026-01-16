@@ -9,7 +9,11 @@ export type AutoloadConfig = {
     afterText?: string;
 };
 
-const DEFAULT_DELAY_MS = 4;
+// IMPORTANT:
+// Apple-1 keyboard input is effectively a single-byte latch. If we "type" too fast,
+// the CPU has not read the previous character yet and new characters overwrite it.
+// The UI paste handler uses ~160ms per character to stay reliable, so we mirror that.
+const DEFAULT_DELAY_MS = 160;
 
 const sleep = (ms: number): Promise<void> =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,7 +25,8 @@ const parseDelay = (value: string | null): number => {
     if (!value) return DEFAULT_DELAY_MS;
     const n = Number.parseInt(value, 10);
     if (!Number.isFinite(n)) return DEFAULT_DELAY_MS;
-    return Math.max(0, Math.min(250, n));
+    // Allow slower/saner typing for long scripts; keep an upper bound to avoid abuse.
+    return Math.max(0, Math.min(2000, n));
 };
 
 const resolveUrl = (url: string): string => new URL(url, window.location.href).toString();
@@ -103,15 +108,16 @@ const injectTextAsKeys = async (
 export const runAutoload = async (workerManager: WorkerManager, cfg: AutoloadConfig): Promise<void> => {
     if (cfg.resetBeforeLoad) {
         await workerManager.keyDown('Tab');
-        // Give the emulation loop a breath after reset.
-        await sleep(25);
+        // Give the emulation loop time to actually reset and show the prompt.
+        // Too short delays here make the first typed chars get lost/corrupted.
+        await sleep(250);
     }
 
     if (cfg.stateUrl) {
         const state = await fetchState(cfg.stateUrl);
         await workerManager.loadState(state);
         // After state load the worker restarts the loop; a short delay helps UI settle.
-        await sleep(25);
+        await sleep(250);
     }
 
     if (cfg.scriptUrl) {
