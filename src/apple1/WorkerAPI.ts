@@ -379,6 +379,81 @@ export class WorkerAPI implements IWorkerAPI {
         console.log('[WorkerAPI] keyDown called with key:', key);
         this.workerState.keyboard.write(key);
     }
+
+    private async sleep(ms: number): Promise<void> {
+        await new Promise<void>(resolve => setTimeout(resolve, ms));
+    }
+
+    private isKeyboardCharPending(): boolean {
+        // CRA bit 7 is set on CA1 transition (keyboard strobe) and cleared
+        // when the emulated CPU reads PORTA ($D010).
+        const cra = this.workerState.apple1.pia.read(1);
+        return (cra & 0x80) !== 0;
+    }
+
+    async typeText(
+        text: string,
+        options?: { pollMs?: number; maxWaitMs?: number }
+    ): Promise<void> {
+        const pollMs = Math.max(0, options?.pollMs ?? 1);
+        const maxWaitMs = Math.max(50, options?.maxWaitMs ?? 3000);
+
+        const toKeyString = (ch: string): string => {
+            // Route special characters through WebKeyboard's logic.
+            // - Newlines become Enter
+            // - Tabs become Tab (RESET)
+            // - ESC uses Escape
+            // - Backspace uses Backspace
+            if (ch === '\n' || ch === '\r') return 'Enter';
+            if (ch === '\t') return 'Tab';
+            if (ch === '\u001b') return 'Escape';
+            if (ch === '\b') return 'Backspace';
+            return ch;
+        };
+
+        for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            const startedAt = Date.now();
+
+            // Wait until the previous key was consumed.
+            while (this.isKeyboardCharPending()) {
+                if (Date.now() - startedAt > maxWaitMs) {
+                    loggingService.log(
+                        'warn',
+                        'TypeText',
+                        `Timeout waiting for keyboard ready at index ${i}`
+                    );
+                    break;
+                }
+                await this.sleep(pollMs);
+            }
+
+            // Send the next key.
+            this.workerState.keyboard.write(toKeyString(ch));
+        }
+    }
+
+    getScreenText(options?: { trimRight?: boolean }): string {
+        const trimRight = options?.trimRight ?? true;
+        const state = this.workerState.video.getState();
+        const lines = state.buffer.map(([, row]) => {
+            const line = row.join('');
+            return trimRight ? line.replace(/\s+$/g, '') : line;
+        });
+        return lines.join('\n');
+    }
+
+    writeMemoryBlock(start: number, data: number[]): void {
+        if (!Array.isArray(data) || data.length === 0) return;
+        let addr = start;
+        for (let i = 0; i < data.length; i++, addr++) {
+            const value = data[i];
+            if (addr < 0 || addr > 0xFFFF) break;
+            if (typeof value !== 'number') continue;
+            const b = value & 0xFF;
+            this.workerState.apple1.bus.write(addr, b);
+        }
+    }
     
     // ========== Debug Information ==========
     

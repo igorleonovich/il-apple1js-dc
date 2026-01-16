@@ -197,6 +197,27 @@ export class WorkerManager {
         }
     }
 
+    async typeText(
+        text: string,
+        options?: { pollMs?: number; maxWaitMs?: number }
+    ): Promise<void> {
+        if (this.comlinkAPI) {
+            await this.comlinkAPI.typeText(text, options);
+        }
+    }
+
+    async getScreenText(options?: { trimRight?: boolean }): Promise<string | void> {
+        if (this.comlinkAPI) {
+            return await this.comlinkAPI.getScreenText(options);
+        }
+    }
+
+    async writeMemoryBlock(start: number, data: number[]): Promise<void> {
+        if (this.comlinkAPI) {
+            await this.comlinkAPI.writeMemoryBlock(start, data);
+        }
+    }
+
     // ========== Event Subscriptions (Comlink only) ==========
 
     async onVideoUpdate(callback: (data: VideoData) => void): Promise<(() => void) | void> {

@@ -6,14 +6,11 @@ export type AutoloadConfig = {
     scriptUrl?: string;
     resetBeforeLoad: boolean;
     delayMs: number;
+    mode: 'fast' | 'keys';
     afterText?: string;
 };
 
-// IMPORTANT:
-// Apple-1 keyboard input is effectively a single-byte latch. If we "type" too fast,
-// the CPU has not read the previous character yet and new characters overwrite it.
-// The UI paste handler uses ~160ms per character to stay reliable, so we mirror that.
-const DEFAULT_DELAY_MS = 160;
+const DEFAULT_DELAY_MS = 4;
 
 const sleep = (ms: number): Promise<void> =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,8 +22,7 @@ const parseDelay = (value: string | null): number => {
     if (!value) return DEFAULT_DELAY_MS;
     const n = Number.parseInt(value, 10);
     if (!Number.isFinite(n)) return DEFAULT_DELAY_MS;
-    // Allow slower/saner typing for long scripts; keep an upper bound to avoid abuse.
-    return Math.max(0, Math.min(2000, n));
+    return Math.max(0, Math.min(250, n));
 };
 
 const resolveUrl = (url: string): string => new URL(url, window.location.href).toString();
@@ -42,6 +38,7 @@ export const getAutoloadConfig = (search: string = window.location.search): Auto
     const cfg: AutoloadConfig = {
         resetBeforeLoad: parseBool(params.get('reset')),
         delayMs: parseDelay(params.get('delay')),
+        mode: params.get('mode') === 'keys' ? 'keys' : 'fast',
     };
 
     if (state) cfg.stateUrl = resolveUrl(state);
@@ -105,27 +102,46 @@ const injectTextAsKeys = async (
     }
 };
 
+const injectTextFast = async (
+    workerManager: WorkerManager,
+    text: string,
+    pollMs: number,
+): Promise<void> => {
+    // Normalize line endings so CRLF does not become two Enter presses.
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    // Let the worker coordinate pacing by waiting for the PIA keyboard flag.
+    // "pollMs" is a small delay between readiness checks to avoid a tight busy loop.
+    await workerManager.typeText(normalized, { pollMs });
+};
+
 export const runAutoload = async (workerManager: WorkerManager, cfg: AutoloadConfig): Promise<void> => {
     if (cfg.resetBeforeLoad) {
         await workerManager.keyDown('Tab');
-        // Give the emulation loop time to actually reset and show the prompt.
-        // Too short delays here make the first typed chars get lost/corrupted.
-        await sleep(250);
+        // Give the emulation loop a breath after reset.
+        await sleep(25);
     }
 
     if (cfg.stateUrl) {
         const state = await fetchState(cfg.stateUrl);
         await workerManager.loadState(state);
         // After state load the worker restarts the loop; a short delay helps UI settle.
-        await sleep(250);
+        await sleep(25);
     }
 
     if (cfg.scriptUrl) {
         const script = await fetchText(cfg.scriptUrl);
-        await injectTextAsKeys(workerManager, script, cfg.delayMs);
+        if (cfg.mode === 'keys') {
+            await injectTextAsKeys(workerManager, script, cfg.delayMs);
+        } else {
+            await injectTextFast(workerManager, script, cfg.delayMs);
+        }
     }
 
     if (cfg.afterText) {
-        await injectTextAsKeys(workerManager, cfg.afterText, cfg.delayMs);
+        if (cfg.mode === 'keys') {
+            await injectTextAsKeys(workerManager, cfg.afterText, cfg.delayMs);
+        } else {
+            await injectTextFast(workerManager, cfg.afterText, cfg.delayMs);
+        }
     }
 };

@@ -134,6 +134,27 @@ export interface IWorkerAPI {
      * @param key The key character or code
      */
     keyDown(key: string): void;
+
+    /**
+     * Type a full text payload using the Apple-1 keyboard interface.
+     *
+     * This is designed for "fast load" flows: the worker will wait until the
+     * previous key was consumed by the emulated system (PIA CA1 IRQ flag cleared)
+     * before sending the next character.
+     */
+    typeText(text: string, options?: { pollMs?: number; maxWaitMs?: number }): Promise<void>;
+
+    /**
+     * Return the current screen as plain text.
+     */
+    getScreenText(options?: { trimRight?: boolean }): string;
+
+    /**
+     * Write a contiguous block into memory.
+     *
+     * This avoids Comlink overhead of calling writeMemory for each byte.
+     */
+    writeMemoryBlock(start: number, data: number[]): void;
     
     // ========== Debug Information ==========
     

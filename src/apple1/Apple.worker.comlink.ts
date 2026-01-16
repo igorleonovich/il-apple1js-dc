@@ -62,6 +62,9 @@ class ComlinkWorkerAPI implements IWorkerAPI {
     setCycleAccurateMode = (enabled: boolean) => this.api.setCycleAccurateMode(enabled);
     setDebuggerActive = (active: boolean) => this.api.setDebuggerActive(active);
     keyDown = (key: string) => this.api.keyDown(key);
+    typeText = (text: string, options?: { pollMs?: number; maxWaitMs?: number }) => this.api.typeText(text, options);
+    getScreenText = (options?: { trimRight?: boolean }) => this.api.getScreenText(options);
+    writeMemoryBlock = (start: number, data: number[]) => this.api.writeMemoryBlock(start, data);
     getDebugInfo = () => this.api.getDebugInfo();
 
     // Event subscription methods - forward to underlying WorkerAPI

@@ -81,3 +81,31 @@ RUN
 ```
 
 Enjoy!
+
+## Autoload / "Deploy" helpers (this fork)
+
+This fork adds a simple URL-driven autoload mechanism so you can "deploy" a text
+program without manually typing or pasting it.
+
+Examples:
+
+- Load and type a BASIC script (fast, reliable):
+
+```text
+http://localhost:3000/?reset=1&load=/programs/basic_hello.txt
+```
+
+- Same, but keep the old "one key at a time" mode (visual typing, slower):
+
+```text
+http://localhost:3000/?reset=1&load=/programs/basic_hello.txt&mode=keys&delay=25
+```
+
+Params:
+
+- `reset=1` - send Tab (RESET) before loading
+- `load=<url>` - fetch and inject text into the emulator
+- `state=<url>` - fetch and load a saved state JSON
+- `after=<text>` - append additional input after the main load
+- `mode=fast|keys` - `fast` waits for keyboard readiness in the worker, `keys` uses per-key delays
+- `delay=<ms>` - in `mode=fast` this is the poll interval; in `mode=keys` this is the per-key delay
